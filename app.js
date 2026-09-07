@@ -20,16 +20,34 @@ const PEOPLE = [
   "潘虹吟"
 ];
 
+const ITEMS = [
+  "膠潤水亮飲-8包/盒",
+  "MW肽極粹安撫面膜",
+  "元氣茶酵素-2025袋裝",
+  "元氣茶酵素-2025盒裝",
+  "新A肽-15ml滴管瓶",
+  "新超肽-真空瓶 30ml",
+  "大水凝乳",
+  "無痕肌修膚水凝乳 30ml-軟管",
+  "完膜肽健衛兵-升級版",
+  "MinWin口腔護理保健液",
+  "大勇腱 250ml",
+  "即克鬆 15mL-盒",
+  "水漾肌保濕活膚露 100ml-盒",
+  "勇腱潤節舒緩霜 30ML",
+  "青春調理凝膠 15ml盒",
+  "早安小一號綠咖啡 90入",
+  "早安小一號綠咖啡 30入",
+  "美白精華液 2026-50ml-盒"
+];
+
 const SHEET_BASE =
   "https://docs.google.com/spreadsheets/d/13tRDiHhpYCaUylrlkLL3PB6bcB8u5aT583TEwqMzH34/gviz/tq";
-
 const SHEET_GID = "813555188";
 const SHEET_QUERY = "SELECT B,C WHERE B IS NOT NULL";
 
 const $ = id => document.getElementById(id);
-
 let STOCK = {};
-let ITEMS = [];
 let SELECTED = new Set();
 
 function esc(s){
@@ -46,22 +64,6 @@ function localToday(){
   return `${y}-${m}-${day}`;
 }
 
-function getCache(){
-  try{
-    return JSON.parse(localStorage.getItem("inventorySheetCacheV1") || "null");
-  }catch{
-    return null;
-  }
-}
-
-function setCache(){
-  localStorage.setItem("inventorySheetCacheV1", JSON.stringify({
-    at: Date.now(),
-    items: ITEMS,
-    stock: STOCK
-  }));
-}
-
 function init(){
   $("date").value = localToday();
 
@@ -69,30 +71,14 @@ function init(){
     `<option value="">請選擇</option>` +
     PEOPLE.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
 
-  const cache = getCache();
-  if(cache?.items?.length){
-    ITEMS = cache.items;
-    STOCK = cache.stock || {};
-    renderPicker();
-    renderSelected();
-    const t = new Date(cache.at);
-    $("stockSyncText").textContent =
-      `先顯示上次成功資料（${t.toLocaleString("zh-TW",{hour12:false})}），正在更新…`;
-  }else{
-    $("itemList").innerHTML = `<div class="muted">正在讀取品項清單…</div>`;
-  }
-
-  loadSheetData().catch(()=>{});
+  renderPicker();
+  renderSelected();
+  loadStock();
 }
 
 function renderPicker(){
   const q = $("itemSearch").value.trim().toLowerCase();
   const list = ITEMS.filter(name => name.toLowerCase().includes(q));
-
-  if(!list.length){
-    $("itemList").innerHTML = `<div class="muted">沒有符合的品項。</div>`;
-    return;
-  }
 
   $("itemList").innerHTML = list.map(name => {
     const checked = SELECTED.has(name);
@@ -117,14 +103,14 @@ function renderPicker(){
 }
 
 function stockText(name){
-  if(!(name in STOCK) || STOCK[name] === "") return "庫存 —";
+  if(!(name in STOCK)) return "庫存 —";
   return `庫存 ${STOCK[name]}`;
 }
 
 function refreshStockPills(){
   document.querySelectorAll("[data-stock-name]").forEach(elm => {
     const name = elm.dataset.stockName;
-    if(!(name in STOCK) || STOCK[name] === ""){
+    if(!(name in STOCK)){
       elm.textContent = "庫存 —";
       elm.className = "stock-pill";
       return;
@@ -185,121 +171,110 @@ $("clearItemsBtn").addEventListener("click", () => {
   renderSelected();
 });
 
-$("addItemBtn").addEventListener("click", () => {
-  const overlay = document.createElement("div");
-  overlay.className = "add-item-dialog";
-  overlay.innerHTML = `
-    <div class="add-item-card">
-      <h3>新增臨時品項</h3>
-      <label>品項名稱
-        <input id="newItemName" placeholder="輸入新品項名稱">
-      </label>
-      <div class="add-item-actions">
-        <button type="button" id="cancelAddItem">取消</button>
-        <button type="button" id="confirmAddItem" class="primary">加入</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
+$("refreshStockBtn").addEventListener("click", loadStock);
 
-  const input = overlay.querySelector("#newItemName");
-  input.focus();
+function loadStock(){
+  $("stockSyncText").textContent = "正在更新 Google Sheet 庫存…";
 
-  overlay.querySelector("#cancelAddItem").onclick = () => overlay.remove();
-  overlay.querySelector("#confirmAddItem").onclick = () => {
-    const name = input.value.trim();
-    if(!name) return;
-    if(!ITEMS.includes(name)) ITEMS.push(name);
-    SELECTED.add(name);
-    renderPicker();
-    renderSelected();
-    overlay.remove();
-  };
-});
+  const callbackName =
+    "__stockCallback_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+  const script = document.createElement("script");
 
-$("refreshStockBtn").addEventListener("click", () => loadSheetData().catch(()=>{}));
+  const timeout = setTimeout(() => {
+    cleanup();
+    $("stockSyncText").textContent =
+      "庫存暫時無法更新；品項清單仍可正常使用。";
+  }, 4000);
 
-function loadSheetData(){
-  return new Promise((resolve, reject) => {
-    $("stockSyncText").textContent = "正在讀取 Google Sheet…";
+  function cleanup(){
+    clearTimeout(timeout);
+    try{ delete window[callbackName]; }catch{}
+    script.remove();
+  }
 
-    const callbackName = "__sheetCallback_" + Date.now() + "_" + Math.random().toString(36).slice(2);
-    const script = document.createElement("script");
+  window[callbackName] = data => {
+    try{
+      const rows = data?.table?.rows || [];
+      const nextStock = {};
 
-    const timeout = setTimeout(() => {
-      cleanup();
-      if(ITEMS.length){
-        $("stockSyncText").textContent =
-          "這次更新失敗，已保留上次成功讀取的品項與庫存。";
-      }else{
-        $("stockSyncText").textContent =
-          "庫存讀取失敗；仍可用「＋新增品項」填表。";
+      for(const row of rows){
+        const name = String(row?.c?.[0]?.v ?? "").trim();
+        const stock = String(row?.c?.[1]?.v ?? "").trim();
+        if(!name) continue;
+        nextStock[name] = stock;
       }
-      reject(new Error("Sheet refresh timeout"));
-    }, 8000);
 
-    function cleanup(){
-      clearTimeout(timeout);
-      try{ delete window[callbackName]; }catch{}
-      script.remove();
-    }
+      STOCK = nextStock;
+      refreshStockPills();
+      renderSelected();
 
-    window[callbackName] = data => {
-      try{
-        const rows = data?.table?.rows || [];
-        const nextItems = [];
-        const nextStock = {};
-
-        for(const row of rows){
-          const name = String(row?.c?.[0]?.v ?? "").trim();
-          const stock = String(row?.c?.[1]?.v ?? "").trim();
-          if(!name) continue;
-          if(!nextItems.includes(name)) nextItems.push(name);
-          nextStock[name] = stock;
-        }
-
-        if(!nextItems.length) throw new Error("No data");
-
-        ITEMS = nextItems;
-        STOCK = nextStock;
-        setCache();
-
-        renderPicker();
-        renderSelected();
-
-        $("stockSyncText").textContent =
-          `已同步 ${ITEMS.length} 個品項。`;
-
-        resolve({items: ITEMS, stock: STOCK});
-      }catch(err){
-        console.error(err);
-        $("stockSyncText").textContent =
-          ITEMS.length
-            ? "這次更新失敗，已保留上次成功資料。"
-            : "庫存讀取失敗；仍可用「＋新增品項」填表。";
-        reject(err);
-      }finally{
-        cleanup();
-      }
-    };
-
-    const params = new URLSearchParams({
-      gid: SHEET_GID,
-      tq: SHEET_QUERY,
-      tqx: `responseHandler:${callbackName}`
-    });
-
-    script.src = `${SHEET_BASE}?${params.toString()}`;
-    script.onerror = () => {
-      cleanup();
+      const matched = ITEMS.filter(name => name in STOCK).length;
       $("stockSyncText").textContent =
-        ITEMS.length
-          ? "這次更新失敗，已保留上次成功資料。"
-          : "庫存讀取失敗；仍可用「＋新增品項」填表。";
-      reject(new Error("Sheet script load failed"));
-    };
+        `庫存已更新；固定品項匹配 ${matched}/${ITEMS.length}。`;
+    }catch(err){
+      console.error(err);
+      $("stockSyncText").textContent =
+        "庫存資料格式異常；品項清單仍可正常使用。";
+    }finally{
+      cleanup();
+    }
+  };
 
-    document.body.appendChild(script);
+  const params = new URLSearchParams({
+    gid: SHEET_GID,
+    tq: SHEET_QUERY,
+    tqx: `out:json;responseHandler:${callbackName}`,
+    _: String(Date.now())
   });
+
+  script.src = `${SHEET_BASE}?${params.toString()}`;
+  script.onerror = () => {
+    cleanup();
+    $("stockSyncText").textContent =
+      "庫存連線失敗；品項清單仍可正常使用。";
+  };
+
+  document.body.appendChild(script);
+}
+
+function parseCSV(text){
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+
+  for(let i=0; i<text.length; i++){
+    const c = text[i];
+
+    if(quoted){
+      if(c === '"' && text[i+1] === '"'){
+        cell += '"';
+        i++;
+      }else if(c === '"'){
+        quoted = false;
+      }else{
+        cell += c;
+      }
+    }else{
+      if(c === '"'){
+        quoted = true;
+      }else if(c === ","){
+        row.push(cell);
+        cell = "";
+      }else if(c === "\n"){
+        row.push(cell.replace(/\r$/, ""));
+        rows.push(row);
+        row = [];
+        cell = "";
+      }else{
+        cell += c;
+      }
+    }
+  }
+
+  row.push(cell.replace(/\r$/, ""));
+  rows.push(row);
+  return rows;
 }
 
 function submitOne(record){
@@ -373,44 +348,12 @@ $("recordForm").addEventListener("submit", async e => {
     return;
   }
 
-  const btn = $("submitBtn");
-  const originalText = btn.textContent;
-  btn.disabled = true;
-
-  // 送出前強制重新抓最新庫存，降低多人同時操作看到舊庫存的風險。
-  btn.textContent = "確認最新庫存…";
-  $("statusBox").innerHTML =
-    `<span class="status-warn">正在重新讀取最新庫存，確認後才會送出。</span>`;
-
-  try{
-    await loadSheetData();
-  }catch(err){
-    btn.disabled = false;
-    btn.textContent = originalText;
-    $("statusBox").innerHTML =
-      `<span class="status-error">送出前無法取得最新庫存，因此本次沒有送出。</span><br>` +
-      `請稍後再試，或按「重新整理庫存」成功後再送出。`;
-    return;
-  }
-
-  // 重新讀取後再檢查一次所選品項是否仍存在。
-  for(const name of names){
-    if(!ITEMS.includes(name) && !(name in STOCK)){
-      // 臨時新增品項可允許沒有 Sheet 庫存資料
-      continue;
-    }
-  }
-
   if($("type").value === "領出"){
     for(const name of names){
       if(name in STOCK){
         const current = Number(STOCK[name]);
         if(Number.isFinite(current) && qtyMap[name] > current){
-          btn.disabled = false;
-          btn.textContent = originalText;
-          $("statusBox").innerHTML =
-            `<span class="status-error">最新庫存不足，本次沒有送出。</span>`;
-          alert(`${name} 最新庫存為 ${STOCK[name]}，領出數量不可填 ${qtyMap[name]}。`);
+          alert(`${name} 目前庫存 ${STOCK[name]}，領出數量不可填 ${qtyMap[name]}。`);
           return;
         }
       }
@@ -433,8 +376,10 @@ $("recordForm").addEventListener("submit", async e => {
     qty: qtyMap[name]
   }));
 
+  const btn = $("submitBtn");
+  btn.disabled = true;
   $("statusBox").innerHTML =
-    `<span class="status-warn">最新庫存確認完成，正在送出 ${batch.length} 筆…</span>`;
+    `<span class="status-warn">正在送出 ${batch.length} 筆…</span>`;
 
   let sent = 0;
 
@@ -452,14 +397,14 @@ $("recordForm").addEventListener("submit", async e => {
     renderPicker();
     renderSelected();
 
-    setTimeout(() => loadSheetData().catch(()=>{}), 3000);
+    setTimeout(loadStock, 3000);
   }catch(err){
     console.error(err);
     $("statusBox").innerHTML =
       `<span class="status-error">送出中斷，已完成 ${sent}/${batch.length} 筆。</span>`;
   }finally{
     btn.disabled = false;
-    btn.textContent = originalText;
+    btn.textContent = "送出到 Google Form";
   }
 });
 

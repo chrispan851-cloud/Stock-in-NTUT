@@ -1,21 +1,10 @@
-# GitHub Google Form 庫存介面 v7
+# GitHub Google Form 庫存介面 v10
 
-## v7
-- 品項不再寫死在 GitHub 程式裡。
-- 直接從 Google Sheet 的 B 欄讀產品、C 欄讀庫存。
-- 改用 Google Visualization JSONP，避免一般 fetch 的跨網域限制。
-- 頁面開啟時一次讀取全部品項與庫存。
-- 成功讀取後快取到瀏覽器；下次 Google 暫時失敗時仍顯示上次資料。
-- 可手動按「重新整理庫存」。
-- 新增「＋新增品項」：可臨時加入這次要填的品項，不會寫回 Google Sheet。
-- 之後你只要在 Google Sheet 新增同名品項，重新整理後就會自動進入選單並顯示庫存。
-- 多品項複選與 Google Form 拆筆送出維持不變。
-
-
-## v8 多人操作保護
-- 按下送出後，不會立刻送 Google Form。
-- 會先強制重新讀取一次 Google Sheet 最新庫存。
-- 最新庫存讀取成功後，才檢查是否足夠並送出。
-- 若送出前讀不到最新庫存，本次直接不送出，避免用舊庫存誤判。
-- 這能大幅降低多人不同時間操作造成的庫存誤差。
-- 仍然不是資料庫交易鎖；若兩個人幾乎同一秒送出同一品項，理論上仍可能同時通過檢查。
+## 這版的設計
+- 品項清單固定寫在 GitHub 程式裡，不再從 Google Sheet 讀取。
+- 固定品項使用使用者原本 iPhone 捷徑截圖中的清單。
+- Google Sheet 只負責讀取庫存數量（B 欄品項、C 欄庫存）。
+- 即使 Google Sheet 庫存讀取失敗，品項選單仍會立即正常顯示與使用。
+- 庫存讀取改用 Google Visualization JSONP，避免一般瀏覽器跨網域 fetch 問題。
+- 多品項複選、各自數量、拆成多筆 Google Form 回覆功能保留。
+- 日後若要新增正式品項，只要修改 app.js 裡的 ITEMS 清單即可。
