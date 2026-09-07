@@ -10,7 +10,7 @@
   <header class="topbar">
     <div>
       <h1>庫存領出 / 入庫</h1>
-      <p>同一頁可複選多個品項；送出後每個品項會各自寫入一筆 Google Form 回覆。</p>
+      <p>可一次選多個品項，每個品項各自填數量，送出後拆成多筆 Google Form 回覆。</p>
     </div>
   </header>
 
@@ -18,7 +18,7 @@
     <section class="panel">
       <div class="panel-head">
         <h2>新增紀錄</h2>
-        <span id="connectionBadge" class="badge info">Google Form 模式</span>
+        <span class="badge info">Google Form 模式</span>
       </div>
 
       <form id="recordForm">
@@ -55,18 +55,27 @@
           </label>
         </div>
 
-        <div class="items-head">
-          <div>
-            <h3>選擇品項</h3>
-            <p>可一次勾選多個；每個品項輸入自己的數量。</p>
-          </div>
-          <div class="item-tools">
-            <input id="itemSearch" class="search" placeholder="搜尋品項" />
-            <button type="button" id="clearItemsBtn">清除勾選</button>
+        <div class="picker-section">
+          <button id="itemPickerBtn" class="picker-button" type="button">
+            <span id="pickerLabel">選擇品項</span>
+            <span class="chevron">▼</span>
+          </button>
+
+          <div id="itemPickerPanel" class="picker-panel hidden">
+            <div class="picker-tools">
+              <input id="itemSearch" class="search" placeholder="搜尋品項" />
+              <button type="button" id="clearItemsBtn">清除勾選</button>
+            </div>
+            <div id="itemList" class="item-list"></div>
           </div>
         </div>
 
-        <div id="itemList" class="item-list"></div>
+        <div id="selectedArea" class="selected-area">
+          <div class="selected-title">已選品項</div>
+          <div id="selectedItemsBox" class="selected-items-box">
+            <span class="muted">尚未選擇品項</span>
+          </div>
+        </div>
 
         <div class="submit-bar">
           <div id="selectedSummary">尚未選擇品項</div>
@@ -75,20 +84,11 @@
       </form>
     </section>
 
-    <section class="panel">
-      <div class="panel-head">
-        <h2>送出狀態</h2>
-      </div>
-      <div id="statusBox" class="status-box">
-        尚未送出資料。
-      </div>
-    </section>
-
     <section class="panel compact-panel">
       <div class="panel-head">
         <div>
           <h2>庫存同步</h2>
-          <div id="stockSyncText" class="sync-text">正在讀取 Google Sheet…</div>
+          <div id="stockSyncText" class="sync-text">尚未讀取</div>
         </div>
         <button id="refreshStockBtn" type="button">重新整理庫存</button>
       </div>
@@ -96,26 +96,9 @@
 
     <section class="panel">
       <div class="panel-head">
-        <h2>目前欄位對應</h2>
+        <h2>送出狀態</h2>
       </div>
-      <div class="table-wrap">
-        <table class="mapping-table">
-          <thead>
-            <tr><th>欄位</th><th>Google Form entry</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>日期</td><td>entry.2101330737</td></tr>
-            <tr><td>產品</td><td>entry.929138264</td></tr>
-            <tr><td>出入庫</td><td>entry.513085917</td></tr>
-            <tr><td>負責人</td><td>entry.2133739501</td></tr>
-            <tr><td>數量</td><td>entry.617108285</td></tr>
-            <tr><td>客戶</td><td>entry.737578233</td></tr>
-            <tr><td>內容</td><td>entry.1020555408</td></tr>
-            <tr><td>備註</td><td>entry.1214459614</td></tr>
-            <tr><td>款項備註</td><td>entry.1546836264</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div id="statusBox" class="status-box">尚未送出資料。</div>
     </section>
   </main>
 
