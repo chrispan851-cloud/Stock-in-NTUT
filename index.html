@@ -3,157 +3,123 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>庫存進出表</title>
+  <title>庫存領出 / 入庫</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div>
-      <h1>庫存進出表</h1>
-      <p>資料儲存在此瀏覽器，可匯出 CSV 備份。</p>
-    </div>
-    <div class="header-actions">
-      <button id="exportItemsBtn">匯出品項 CSV</button>
-      <button id="exportTxBtn">匯出進出紀錄 CSV</button>
-      <button id="backupBtn">完整備份 JSON</button>
-      <label class="file-label">
-        匯入備份
-        <input id="restoreInput" type="file" accept=".json,application/json" />
-      </label>
+      <h1>庫存領出 / 入庫</h1>
+      <p>同一頁可複選多個品項；送出後每個品項會各自寫入一筆 Google Form 回覆。</p>
     </div>
   </header>
 
   <main class="container">
-    <section class="cards">
-      <div class="card stat"><span>品項數</span><strong id="itemCount">0</strong></div>
-      <div class="card stat"><span>總庫存量</span><strong id="totalStock">0</strong></div>
-      <div class="card stat warning"><span>低庫存品項</span><strong id="lowStockCount">0</strong></div>
-    </section>
-
     <section class="panel">
       <div class="panel-head">
-        <h2>新增 / 編輯品項</h2>
+        <h2>新增紀錄</h2>
+        <span id="connectionBadge" class="badge info">Google Form 模式</span>
       </div>
-      <form id="itemForm" class="grid-form">
-        <input type="hidden" id="itemId" />
-        <label>品項名稱
-          <input id="itemName" required placeholder="例如：15 mL 離心管" />
-        </label>
-        <label>規格
-          <input id="itemSpec" placeholder="例如：50 支/包" />
-        </label>
-        <label>單位
-          <input id="itemUnit" required placeholder="例如：包、盒、瓶" />
-        </label>
-        <label>安全庫存
-          <input id="itemMin" type="number" min="0" step="0.01" value="0" required />
-        </label>
-        <label>初始庫存
-          <input id="itemStock" type="number" min="0" step="0.01" value="0" required />
-        </label>
-        <label>備註
-          <input id="itemNote" placeholder="位置、廠牌、貨號等" />
-        </label>
-        <div class="form-actions">
-          <button type="submit" class="primary">儲存品項</button>
-          <button type="button" id="resetItemBtn">清除</button>
+
+      <form id="recordForm">
+        <div class="grid-form">
+          <label>日期
+            <input id="date" type="date" required />
+          </label>
+
+          <label>出入庫
+            <select id="type" required>
+              <option value="領出">領出</option>
+              <option value="入庫">入庫</option>
+            </select>
+          </label>
+
+          <label>負責人
+            <select id="person" required></select>
+          </label>
+
+          <label>客戶
+            <input id="customer" type="text" placeholder="可留空" />
+          </label>
+
+          <label>內容
+            <input id="content" type="text" placeholder="可留空" />
+          </label>
+
+          <label>備註
+            <input id="note" type="text" placeholder="可留空" />
+          </label>
+
+          <label>款項備註
+            <input id="paymentNote" type="text" placeholder="可留空" />
+          </label>
+        </div>
+
+        <div class="items-head">
+          <div>
+            <h3>選擇品項</h3>
+            <p>可一次勾選多個；每個品項輸入自己的數量。</p>
+          </div>
+          <div class="item-tools">
+            <input id="itemSearch" class="search" placeholder="搜尋品項" />
+            <button type="button" id="clearItemsBtn">清除勾選</button>
+          </div>
+        </div>
+
+        <div id="itemList" class="item-list"></div>
+
+        <div class="submit-bar">
+          <div id="selectedSummary">尚未選擇品項</div>
+          <button id="submitBtn" type="submit" class="primary">送出到 Google Form</button>
         </div>
       </form>
     </section>
 
     <section class="panel">
       <div class="panel-head">
-        <h2>入庫 / 出庫</h2>
+        <h2>送出狀態</h2>
       </div>
-      <form id="txForm" class="grid-form">
-        <label>日期
-          <input id="txDate" type="date" required />
-        </label>
-        <label>品項
-          <select id="txItem" required></select>
-        </label>
-        <label>類型
-          <select id="txType">
-            <option value="in">入庫</option>
-            <option value="out">出庫</option>
-          </select>
-        </label>
-        <label>數量
-          <input id="txQty" type="number" min="0.01" step="0.01" required />
-        </label>
-        <label>操作者 / 領用人
-          <input id="txPerson" placeholder="姓名" />
-        </label>
-        <label>備註
-          <input id="txNote" placeholder="用途、批號、原因等" />
-        </label>
-        <div class="form-actions">
-          <button type="submit" class="primary">新增紀錄</button>
-        </div>
-      </form>
+      <div id="statusBox" class="status-box">
+        尚未送出資料。
+      </div>
     </section>
 
-    <section class="panel">
+    <section class="panel compact-panel">
       <div class="panel-head">
-        <h2>庫存總表</h2>
-        <input id="itemSearch" class="search" placeholder="搜尋品項 / 規格 / 備註" />
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>品項</th>
-              <th>規格</th>
-              <th>單位</th>
-              <th>安全庫存</th>
-              <th>現有庫存</th>
-              <th>狀態</th>
-              <th>備註</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="itemTableBody"></tbody>
-        </table>
+        <div>
+          <h2>庫存同步</h2>
+          <div id="stockSyncText" class="sync-text">正在讀取 Google Sheet…</div>
+        </div>
+        <button id="refreshStockBtn" type="button">重新整理庫存</button>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-head">
-        <h2>進出紀錄</h2>
-        <div class="filters">
-          <input id="txSearch" class="search" placeholder="搜尋品項 / 人員 / 備註" />
-          <select id="txFilterType">
-            <option value="">全部類型</option>
-            <option value="in">入庫</option>
-            <option value="out">出庫</option>
-          </select>
-        </div>
+        <h2>目前欄位對應</h2>
       </div>
       <div class="table-wrap">
-        <table>
+        <table class="mapping-table">
           <thead>
-            <tr>
-              <th>日期</th>
-              <th>品項</th>
-              <th>類型</th>
-              <th>數量</th>
-              <th>單位</th>
-              <th>操作者 / 領用人</th>
-              <th>備註</th>
-              <th>建立時間</th>
-              <th>操作</th>
-            </tr>
+            <tr><th>欄位</th><th>Google Form entry</th></tr>
           </thead>
-          <tbody id="txTableBody"></tbody>
+          <tbody>
+            <tr><td>日期</td><td>entry.2101330737</td></tr>
+            <tr><td>產品</td><td>entry.929138264</td></tr>
+            <tr><td>出入庫</td><td>entry.513085917</td></tr>
+            <tr><td>負責人</td><td>entry.2133739501</td></tr>
+            <tr><td>數量</td><td>entry.617108285</td></tr>
+            <tr><td>客戶</td><td>entry.737578233</td></tr>
+            <tr><td>內容</td><td>entry.1020555408</td></tr>
+            <tr><td>備註</td><td>entry.1214459614</td></tr>
+            <tr><td>款項備註</td><td>entry.1546836264</td></tr>
+          </tbody>
         </table>
       </div>
     </section>
   </main>
 
-  <footer>
-    <p>GitHub Pages 靜態版｜資料存在 localStorage。跨裝置/多人共用需另外接資料庫。</p>
-  </footer>
-
+  <iframe name="googleFormSink" id="googleFormSink" class="hidden-frame"></iframe>
   <script src="app.js"></script>
 </body>
 </html>
