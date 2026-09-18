@@ -54,6 +54,9 @@ const $ = id => document.getElementById(id);
 let STOCK = {};
 let SELECTED = new Set();
 
+const STOCK_CACHE_KEY = "ntut_stock_cache_v1";
+const STOCK_CACHE_TIME_KEY = "ntut_stock_cache_time_v1";
+
 function esc(s){
   return String(s ?? "").replace(/[&<>"']/g, c => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
@@ -75,6 +78,7 @@ function init(){
     `<option value="">請選擇</option>` +
     PEOPLE.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
 
+  loadCachedStock();
   renderPicker();
   renderSelected();
   loadStock();
@@ -177,50 +181,118 @@ $("clearItemsBtn").addEventListener("click", () => {
 
 $("refreshStockBtn").addEventListener("click", loadStock);
 
-function loadStock(){
-  $("stockSyncText").textContent = "正在更新 Google Sheet 庫存…";
+function loadCachedStock(){
+  try{
+    const raw = localStorage.getItem(STOCK_CACHE_KEY);
+    if(!raw) return;
+
+    const cached = JSON.parse(raw);
+    if(!cached || typeof cached !== "object") return;
+
+    STOCK = cached;
+    refreshStockPills();
+    renderSelected();
+
+    const savedAt = localStorage.getItem(STOCK_CACHE_TIME_KEY) || "";
+    if(savedAt){
+      $("stockSyncText").textContent = `先顯示上次成功庫存（${savedAt}），正在更新…`;
+    }
+  }catch(err){
+    console.warn("讀取庫存快取失敗", err);
+  }
+}
+
+function saveStockCache(){
+  try{
+    localStorage.setItem(STOCK_CACHE_KEY, JSON.stringify(STOCK));
+    const now = new Date();
+    const text = now.toLocaleString("zh-TW", { hour12:false });
+    localStorage.setItem(STOCK_CACHE_TIME_KEY, text);
+  }catch(err){
+    console.warn("儲存庫存快取失敗", err);
+  }
+}
+
+function loadStock(attempt = 1){
+  const MAX_ATTEMPTS = 3;
+  const TIMEOUT_MS = 12000;
+
+  if(attempt === 1){
+    $("stockSyncText").textContent = "正在更新 Google Sheet 庫存…";
+  }else{
+    $("stockSyncText").textContent = `庫存連線重試中（${attempt}/${MAX_ATTEMPTS}）…`;
+  }
 
   const callbackName =
     "__stockCallback_" + Date.now() + "_" + Math.random().toString(36).slice(2);
   const script = document.createElement("script");
-
-  const timeout = setTimeout(() => {
-    cleanup();
-    $("stockSyncText").textContent =
-      "庫存暫時無法更新；品項清單仍可正常使用。";
-  }, 4000);
+  let finished = false;
 
   function cleanup(){
+    if(finished) return;
+    finished = true;
     clearTimeout(timeout);
     try{ delete window[callbackName]; }catch{}
     script.remove();
   }
 
+  function fail(reason){
+    cleanup();
+
+    if(attempt < MAX_ATTEMPTS){
+      setTimeout(() => loadStock(attempt + 1), 1200);
+      return;
+    }
+
+    const hasCache = Object.keys(STOCK).length > 0;
+    $("stockSyncText").textContent = hasCache
+      ? `即時庫存更新失敗（${reason}）；目前顯示上次成功庫存。`
+      : `庫存更新失敗（${reason}）。請檢查試算表權限、工作表 gid 與 B/C 欄。`;
+  }
+
+  const timeout = setTimeout(() => {
+    fail("逾時");
+  }, TIMEOUT_MS);
+
   window[callbackName] = data => {
     try{
-      const rows = data?.table?.rows || [];
+      if(data?.status && data.status !== "ok"){
+        const detail = (data.errors || [])
+          .map(x => x?.detailed_message || x?.message || x?.reason)
+          .filter(Boolean)
+          .join("；");
+        fail(detail || `Google 回傳 ${data.status}`);
+        return;
+      }
+
+      const rows = data?.table?.rows;
+      if(!Array.isArray(rows)){
+        fail("Google 回傳格式異常");
+        return;
+      }
+
       const nextStock = {};
 
       for(const row of rows){
         const name = String(row?.c?.[0]?.v ?? "").trim();
-        const stock = String(row?.c?.[1]?.v ?? "").trim();
+        const cell = row?.c?.[1];
+        const stock = String(cell?.f ?? cell?.v ?? "").trim();
         if(!name) continue;
         nextStock[name] = stock;
       }
 
       STOCK = nextStock;
+      saveStockCache();
       refreshStockPills();
       renderSelected();
 
       const matched = ITEMS.filter(name => name in STOCK).length;
+      cleanup();
       $("stockSyncText").textContent =
         `庫存已更新；固定品項匹配 ${matched}/${ITEMS.length}。`;
     }catch(err){
       console.error(err);
-      $("stockSyncText").textContent =
-        "庫存資料格式異常；品項清單仍可正常使用。";
-    }finally{
-      cleanup();
+      fail("資料解析失敗");
     }
   };
 
@@ -232,11 +304,8 @@ function loadStock(){
   });
 
   script.src = `${SHEET_BASE}?${params.toString()}`;
-  script.onerror = () => {
-    cleanup();
-    $("stockSyncText").textContent =
-      "庫存連線失敗；品項清單仍可正常使用。";
-  };
+  script.async = true;
+  script.onerror = () => fail("連線錯誤");
 
   document.body.appendChild(script);
 }
