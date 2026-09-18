@@ -46,7 +46,7 @@ const ITEMS = [
 ];
 
 const SHEET_BASE =
-  "https://docs.google.com/spreadsheets/d/13tRDiHhpYCaUylrlkLL3PB6bcB8u5aT583TEwqMzH34/gviz/tq";
+  "https://docs.google.com/spreadsheets/d/13tRDiHhpYCaUyIrIkLL3PB6bcB8u5aT583TEwqMzH34/gviz/tq";
 const SHEET_GID = "813555188";
 const SHEET_QUERY = "SELECT B,C WHERE B IS NOT NULL";
 
